@@ -34,6 +34,9 @@ The scan revealed the following services:
 | 80   | HTTP    | Apache 2.4.58 (Ubuntu) |
 
 The web service immediately stood out as the most promising attack surface.
+<p align="center">
+<img width="1908" height="768" alt="nmap" src="https://github.com/user-attachments/assets/effd3f81-a189-4e78-8ac1-301b0343f088" />
+
 
 ### Notes
 
@@ -73,6 +76,9 @@ The scan revealed several interesting endpoints:
 /layout/
 ```
 
+<p align="center">
+<img width="1915" height="684" alt="gobustr" src="https://github.com/user-attachments/assets/e364fdb9-7447-4143-9b59-9774a15b9177" />
+
 ### Notes
 
 The presence of files such as `config.php` and `api.php` suggested that sensitive functionality might be exposed through the application.
@@ -90,6 +96,9 @@ While reviewing the login page and application content, I discovered the followi
 ```text
 help@support.thm
 ```
+<p align="center">
+<img width="1919" height="885" alt="login" src="https://github.com/user-attachments/assets/d3530a13-4d82-4e86-8ebf-d31675b0093f" />
+
 
 ### Notes
 
@@ -118,6 +127,10 @@ hydra -l help@support.thm \
 
 The attack successfully identified valid credentials for the user account.
 
+<p align="center">
+<img width="1919" height="562" alt="hydra" src="https://github.com/user-attachments/assets/7534d1e3-f9aa-4411-a13e-606fbef9d896" />
+
+
 ### Notes
 
 The absence of brute-force protection significantly weakened the authentication mechanism.
@@ -141,6 +154,10 @@ The `PHPSESSID` cookie appeared to be a standard session identifier.
 
 The `isITUser` cookie was more interesting because it appeared to control user permissions.
 
+<p align="center">
+<img width="1919" height="625" alt="crackstation" src="https://github.com/user-attachments/assets/c867abee-3afa-4a24-948f-a8ffda506c1f" />
+
+
 ### Notes
 
 Whenever I encounter application-specific cookies, I always test whether they influence authorization decisions.
@@ -161,6 +178,10 @@ I gained access to:
 
 * IT Admin Panel
 * API Viewer
+  
+<p align="center">
+<img width="1916" height="555" alt="admin-panel" src="https://github.com/user-attachments/assets/3893a4a8-aa55-4b41-b8ac-bd6d19b98a7a" />
+
 
 ### Notes
 
@@ -175,6 +196,10 @@ This is a classic example of **Broken Access Control**, where users can elevate 
 With elevated privileges, I explored the newly accessible administrative features.
 
 Several administrative functions became visible that were previously hidden.
+
+<p align="center">
+<img width="1919" height="862" alt="api" src="https://github.com/user-attachments/assets/22dacfea-a69e-413a-b827-6a840eff11bb" />
+
 
 ### Notes
 
@@ -198,6 +223,10 @@ The API returned internal user information, including administrative account det
 }
 ```
 
+<p align="center">
+<img width="1021" height="486" alt="specialadmin" src="https://github.com/user-attachments/assets/b9921400-8c96-4bc5-8fbb-0f8c0d869c72" />
+
+
 ### Notes
 
 This response revealed three important pieces of information:
@@ -219,6 +248,10 @@ I tested for directory traversal using the following payload:
 ```text
 dashboard.php?skin=../config
 ```
+
+<p align="center">
+<img width="1246" height="484" alt="sp-pass" src="https://github.com/user-attachments/assets/f1cd7b8d-5483-44d0-b770-e61edbde3632" />
+
 
 ## Result
 
@@ -246,6 +279,10 @@ specialadmin@support.thm
 
 Administrative access was obtained.
 
+<p align="center">
+<img width="1919" height="849" alt="sp-flg" src="https://github.com/user-attachments/assets/9f8d04c7-e6c0-4a25-9c7b-f483eba6238e" />
+
+
 ### Notes
 
 Hardcoded credentials represent a significant security risk because compromise of source code or configuration files immediately exposes privileged access.
@@ -268,6 +305,10 @@ sys=date
 
 I tested various command injection techniques and confirmed that arbitrary command execution was possible.
 
+<p align="center">
+<img width="1919" height="832" alt="sys" src="https://github.com/user-attachments/assets/5ff43482-b063-4d9e-921d-f95a43eb1182" />
+
+
 ### Notes
 
 This was the most critical vulnerability discovered during the assessment because it allowed direct interaction with the operating system.
@@ -283,6 +324,9 @@ The final flag was successfully retrieved from:
 ```text
 /home/ubuntu/user.txt
 ```
+<p align="center">
+<img width="1919" height="837" alt="flag" src="https://github.com/user-attachments/assets/05e06109-4bdd-41be-8206-f63e040a6625" />
+
 
 At this point, the objectives of the room had been completed.
 
