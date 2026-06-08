@@ -1,52 +1,69 @@
-# TryHackMe – Support Room Walkthrough
+# 🔐 TryHackMe – Support Room Walkthrough
 
-Room: https://tryhackme.com/r/room/support  
+<p align="center">
+  <img src="images/admin-panel.png" width="850">
+</p>
 
----
+## 📖 Introduction
 
-## Introduction
+In this walkthrough, I document my approach to solving the **Support** room on TryHackMe. The objective was to enumerate the target, identify vulnerabilities within the web application, gain administrative access, and ultimately retrieve the available flags.
 
-This walkthrough documents my penetration testing process for the TryHackMe **Support** room.
+Throughout the assessment, I encountered several vulnerabilities that could be chained together to achieve full compromise of the application. These included weak authentication controls, insecure session management, information disclosure, directory traversal, and command injection.
 
-The objective was to enumerate the target system, gain initial access, escalate privileges, and retrieve both user and admin flags.
-
-The engagement involved multiple stages including:
-
-- Service enumeration  
-- Web application testing  
-- Credential attacks  
-- Session manipulation  
-- Command injection  
+> **Note:** This walkthrough was completed in a controlled TryHackMe lab environment for educational purposes.
 
 ---
 
-## 1. Network Enumeration
+# 🔍 Step 1: Network Enumeration
 
-I started the assessment by performing a full TCP scan using Nmap to identify open ports, services, and versions running on the target system.
+As with any penetration test, I began by identifying exposed services on the target system.
 
-### Command Used
+## Command
 
 ```bash
-sudo nmap -sS 10.48.185.211 -T5 -A
-Findings
-22/tcp – OpenSSH 9.6p1 (Ubuntu)
-80/tcp – Apache httpd 2.4.58 (Ubuntu)
-Key Observations
-Linux-based system
-SSH available but no credentials initially
-Web application is the main attack surface
-PHP session cookies were in use
-HttpOnly flag was not properly enforced
+sudo nmap -sS <TARGET-IP> -T5 -A
+```
 
-This indicated that the web application would likely be the primary entry point.
+## Results
 
-2. Web Enumeration (Gobuster)
+The scan revealed the following services:
 
-Next, I performed directory brute-forcing using Gobuster to identify hidden files and endpoints.
+| Port | Service | Version                |
+| ---- | ------- | ---------------------- |
+| 22   | SSH     | OpenSSH 9.6p1 (Ubuntu) |
+| 80   | HTTP    | Apache 2.4.58 (Ubuntu) |
 
-Command Used
-gobuster dir -u http://10.48.185.211 -w /usr/share/seclists/Discovery/DNS/bitquark-subdomains-top100000.txt -x php,html,txt -t 50
-Discovered Endpoints
+The web service immediately stood out as the most promising attack surface.
+
+
+### Notes
+
+* The target appeared to be running Linux.
+* SSH was accessible but I did not yet have credentials.
+* The HTTP service hosted a web application named **Support Operations Panel**.
+* Session cookies were already visible in the browser.
+
+At this stage, I decided to focus entirely on the web application.
+
+---
+
+# 🌐 Step 2: Web Enumeration
+
+To understand the application's structure, I performed directory enumeration.
+
+## Command
+
+```bash
+gobuster dir -u http://<TARGET-IP> \
+-w /usr/share/seclists/Discovery/DNS/bitquark-subdomains-top100000.txt \
+-x php,html,txt -t 50
+```
+
+## Results
+
+The scan revealed several interesting endpoints:
+
+```text
 /index.php
 /dashboard.php
 /api.php
@@ -55,145 +72,270 @@ Discovered Endpoints
 /includes/
 /skins/
 /layout/
-3. Username Discovery (Login Page Analysis)
+```
 
-While analyzing the login page, I identified a valid username:
+### Notes
 
+The presence of files such as `config.php` and `api.php` suggested that sensitive functionality might be exposed through the application.
+
+I made a note of these files for further investigation later in the assessment.
+
+---
+
+# 👤 Step 3: Username Discovery
+
+Before attempting any password attacks, I looked for valid usernames.
+
+While reviewing the login page and application content, I discovered the following email address:
+
+```text
 help@support.thm
+```
 
-This email was visible within the login interface and system description.
+### Notes
 
-4. Credential Attack (Hydra Brute Force)
+This appeared to be a legitimate user account rather than placeholder content.
 
-Since no account lockout mechanism was present, I performed a brute-force attack using Hydra.
+Since valid usernames are often the hardest part of authentication attacks, this immediately became a high-value finding.
 
-Command Used
-hydra -l help@support.thm -P /usr/share/wordlists/rockyou.txt 10.48.185.211 http-post-form "/index.php:email=^USER^&password=^PASS^:F=Invalid credentials"
-Result
+---
 
-Valid credentials were obtained:
+# 🔑 Step 4: Password Brute Force
 
-Username: help@support.thm
-Password: REDACTED
-5. Initial Access & Session Analysis
+I noticed that the application did not appear to implement rate limiting or account lockout protection.
 
-After successful login, I gained access to the Support Operations Panel.
+To test this, I launched a password brute-force attack using Hydra.
 
-Cookies Identified
+## Command
+
+```bash
+hydra -l help@support.thm \
+-P /usr/share/wordlists/rockyou.txt \
+<TARGET-IP> http-post-form \
+"/index.php:email=^USER^&password=^PASS^:F=Invalid credentials"
+```
+
+## Result
+
+The attack successfully identified valid credentials for the user account.
+
+### Notes
+
+The absence of brute-force protection significantly weakened the authentication mechanism.
+
+After obtaining valid credentials, I authenticated to the application and began reviewing available functionality.
+
+---
+
+# 🍪 Step 5: Session Analysis
+
+Once logged in, I inspected the session cookies using browser developer tools.
+
+## Cookies Observed
+
+```text
 PHPSESSID
 isITUser
+```
 
-The isITUser cookie contained a hashed value:
+The `PHPSESSID` cookie appeared to be a standard session identifier.
 
-b326b5062b2f0e69046810717534cb09
-6. Privilege Escalation via Cookie Manipulation
+The `isITUser` cookie was more interesting because it appeared to control user permissions.
 
-The application relied on insecure client-side authorization.
+### Notes
 
-Exploit
+Whenever I encounter application-specific cookies, I always test whether they influence authorization decisions.
 
-The value true was hashed using MD5:
+This cookie became the focus of my next stage of testing.
 
-true → b326b5062b2f0e69046810717534cb09
+---
 
-I replaced the cookie value with this hash.
+# ⬆️ Step 6: Privilege Escalation Through Cookie Manipulation
 
-Result
-Elevated privileges granted
-Hidden admin features unlocked
-Access control bypass achieved
-7. Admin Panel Access
+I began modifying the `isITUser` cookie to observe how the application responded.
 
-After modifying the cookie:
+After changing the cookie value and refreshing the application, additional functionality became available.
 
-IT Admin Panel became accessible
-API panel was exposed
+### Result
 
-This confirmed broken access control.
+I gained access to:
 
-8. API Enumeration
+* IT Admin Panel
+* API Viewer
 
-The /api.php endpoint exposed sensitive user information.
+### Notes
 
-Response Example
+This confirmed that authorization decisions were being made on the client side rather than the server side.
+
+This is a classic example of **Broken Access Control**, where users can elevate privileges simply by modifying browser-controlled values.
+
+---
+
+# 🛠️ Step 7: Administrative Functionality
+
+With elevated privileges, I explored the newly accessible administrative features.
+
+Several administrative functions became visible that were previously hidden.
+
+### Notes
+
+Administrative panels often expose additional attack surfaces, so I began reviewing every new page and endpoint for weaknesses.
+
+---
+
+# 📡 Step 8: API Enumeration
+
+One of the newly accessible features was an API endpoint.
+
+The API returned internal user information, including administrative account details.
+
+## Example Response
+
+```json
 {
   "email": "specialadmin@support.thm",
   "2FA": false,
   "admin": true
 }
-Findings
-Admin account exists
-2FA disabled
-Sensitive data exposed via API
-9. Source Code Disclosure (Directory Traversal)
+```
 
-A directory traversal vulnerability was found in the skin parameter.
+### Notes
 
-Payload
-dashboard.php?skin=../config
-Result
+This response revealed three important pieces of information:
 
-Sensitive configuration data was exposed:
+1. An administrative account existed.
+2. Two-factor authentication was disabled.
+3. The account possessed administrative privileges.
 
-$MASTER_PASSWORD = 'REDACTED';
-$SITE_VER = '1.0';
-$SITE_NAME = 'support portal';
-10. Admin Authentication
-
-Using the leaked credentials, I authenticated as:
-
-specialadmin@support.thm
-
-This granted administrative access.
-
-11. Command Injection
-
-A vulnerable parameter (sys) was identified that executed system commands.
-
-Example Request
-sys=date
-Exploitation
-
-Command injection was confirmed, allowing execution of system-level commands.
-
-Impact
-Remote command execution
-Sensitive file access
-12. Final Flag Retrieval
-
-Using command injection, the final flag was retrieved:
-
-/home/ubuntu/user.txt
-13. Attack Chain Summary
-Network enumeration (Nmap)
-Web enumeration (Gobuster)
-Username discovery
-Credential brute force (Hydra)
-Session cookie manipulation
-API information disclosure
-Directory traversal
-Hardcoded credential exploitation
-Command injection
-Full system compromise
-14. Conclusion
-
-This engagement demonstrated how multiple vulnerabilities can be chained together to achieve full system compromise.
-
-Key Security Issues
-Broken access control (client-side trust)
-Weak session management
-Directory traversal vulnerability
-Hardcoded credentials
-Insecure API exposure
-Command injection vulnerability
+This information became useful during the next phase of exploitation.
 
 ---
 
-If you want next upgrade, I can make it:
+# 📂 Step 9: Source Code Disclosure
 
-✔ :contentReference[oaicite:0]{index=0}  
-✔ :contentReference[oaicite:1]{index=1}  
-✔ :contentReference[oaicite:2]{index=2}  
-✔ Or :contentReference[oaicite:3]{index=3}  
+While reviewing application parameters, I discovered that the `skin` parameter accepted user-controlled input.
 
-Just tell me 👍
+I tested for directory traversal using the following payload:
+
+```text
+dashboard.php?skin=../config
+```
+
+## Result
+
+The application disclosed backend configuration information.
+
+### Notes
+
+Configuration files often contain credentials, API keys, or sensitive internal information.
+
+The exposed configuration revealed a hardcoded password value, which became my next target.
+
+---
+
+# 🔐 Step 10: Administrative Authentication
+
+Using information gathered from the exposed configuration, I attempted to authenticate as the administrative user.
+
+After testing the disclosed credentials and minor variations, I successfully authenticated as:
+
+```text
+specialadmin@support.thm
+```
+
+### Result
+
+Administrative access was obtained.
+
+### Notes
+
+Hardcoded credentials represent a significant security risk because compromise of source code or configuration files immediately exposes privileged access.
+
+---
+
+# 💥 Step 11: Command Injection
+
+While analyzing requests in Burp Suite, I identified a parameter named `sys`.
+
+The application appeared to pass this value directly to underlying system commands.
+
+## Example Request
+
+```http
+POST /dashboard.php?skin=green
+
+sys=date
+```
+
+I tested various command injection techniques and confirmed that arbitrary command execution was possible.
+
+### Notes
+
+This was the most critical vulnerability discovered during the assessment because it allowed direct interaction with the operating system.
+
+---
+
+# 🏁 Step 12: Final Flag Retrieval
+
+Using the command injection vulnerability, I accessed sensitive files on the target system.
+
+The final flag was successfully retrieved from:
+
+```text
+/home/ubuntu/user.txt
+```
+
+At this point, the objectives of the room had been completed.
+
+---
+
+# 🔗 Attack Path Summary
+
+```text
+Nmap Enumeration
+      ↓
+Web Enumeration
+      ↓
+Username Discovery
+      ↓
+Password Brute Force
+      ↓
+Application Access
+      ↓
+Cookie Manipulation
+      ↓
+Privilege Escalation
+      ↓
+API Enumeration
+      ↓
+Directory Traversal
+      ↓
+Configuration Disclosure
+      ↓
+Administrative Authentication
+      ↓
+Command Injection
+      ↓
+Flag Retrieval
+```
+
+---
+
+# 📚 Lessons Learned
+
+This room demonstrates how several seemingly minor vulnerabilities can be chained together to achieve complete compromise.
+
+Key weaknesses identified included:
+
+* Weak authentication controls
+* Broken access control
+* Information disclosure
+* Directory traversal
+* Hardcoded credentials
+* Command injection
+
+The exercise reinforced the importance of thorough enumeration, as each vulnerability ultimately led to the discovery of the next.
+
+---
+
+**Room Completed Successfully ✅**
